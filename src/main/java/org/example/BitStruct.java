@@ -1,15 +1,18 @@
 package org.example;
 
+import org.example.BitVal.BitOrdering;
+
 import java.lang.reflect.AccessFlag;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.InaccessibleObjectException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Parameter;
+import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -28,10 +31,10 @@ public interface BitStruct {
     static <T extends BitStruct> T decode(Class<T> clazz, byte[] bytes) {
         if (clazz.isEnum()) throw new RuntimeException("Can't populate Enums classes.");
 
-        final List<Field> bitValFields = Arrays.stream(clazz.getFields())
+        final ArrayList<Field> bitValFields = Arrays.stream(clazz.getFields())
                 .filter(not(BitStruct::isStatic))
                 .filter(BitStruct::hasBitValAnnotation)
-                .toList();
+                .collect(Collectors.toCollection(ArrayList::new));
         final List<String> fieldNames = bitValFields.stream().map(Field::getName).toList();
 
 
@@ -44,7 +47,9 @@ public interface BitStruct {
                                 "Note constructor parameter names and BitVal annotated field names must match."
                 ));
 
-        final Object[] constructorArgs = parseBytes(bitValFields, bytes);
+        bitValFields.sort(constructorOrdering(constructor));
+
+        final Object[] constructorArgs = constructArgs(bitValFields, bytes);
         constructor.setAccessible(true);
 
         try {
@@ -75,8 +80,107 @@ public interface BitStruct {
         return constructParamNames.equals(new HashSet<>(fieldNames));
     }
 
-    private static Object[] parseBytes(List<Field> bitValFields, byte[] bytes) {
-        throw new InaccessibleObjectException();
+    private static Comparator<? super Field> constructorOrdering(Constructor<?> constructor) {
+        final List<String> paramNames = Arrays.stream(constructor.getParameters())
+                .map(Parameter::getName)
+                .toList();
+        return Comparator.comparingInt(field -> paramNames.indexOf(field.getName()));
+    }
+
+    private static Object[] constructArgs(List<Field> bitValFields, byte[] bytes) {
+        final Object[] constructorArgs = new Object[bitValFields.size()];
+
+        for (int i = 0; i < bitValFields.size(); i++) {
+            final Field field = bitValFields.get(i);
+            final BitVal bitVal = field.getAnnotation(BitVal.class);
+            final Class<?> baseType = getBaseType(field.getType());
+            final Object extractedVal = getBitVal(bitVal, bytes, baseType);
+            constructorArgs[i] = extractedVal;
+        }
+
+        return constructorArgs;
+    }
+
+
+
+    private static Class<?> getBaseType(Class<?> type) {
+        if (type.isPrimitive()) {
+            return switch (type.getSimpleName()) {
+                case "boolean" -> Boolean.class;
+                case "byte" -> Byte.class;
+                case "short" -> Short.class;
+                case "int" -> Integer.class;
+                case "long" -> Long.class;
+                default -> throw new IllegalStateException("Unsupported primitive type: " + type.getSimpleName());
+            };
+        }
+
+        final boolean isGood = BitStruct.class.isAssignableFrom(type)
+                || Boolean.class.equals(type)
+                || Byte.class.equals(type)
+                || Short.class.equals(type)
+                || Integer.class.equals(type)
+                || Long.class.equals(type);
+        if (isGood) return type;
+
+        throw new IllegalStateException("Unsupported type: " + type.getSimpleName());
+    }
+
+    private static Object getBitVal(BitVal bitVal, byte[] bytes, Class<?> baseType) {
+        if (BitStruct.class.isAssignableFrom(baseType)) {
+            final byte[] subRange = getSubRange(bitVal, bytes);
+            @SuppressWarnings("unchecked") // Safe by if branch condition.
+            final Class<? extends BitStruct> bound = (Class<? extends BitStruct>) baseType;
+            return BitStruct.decode(bound, subRange);
+        }
+
+        final BigInteger bigInteger = getBigInteger(bitVal, bytes);
+        return switch (baseType.getSimpleName()) {
+            case "Boolean" -> bigInteger.intValue() != 0;
+            case "Byte" -> bigInteger.byteValue();
+            case "Short" -> bigInteger.shortValue();
+            case "Integer" -> bigInteger.intValue();
+            case "Long" -> bigInteger.longValue();
+            default -> throw new IllegalStateException(
+                    "Unsupported type at extract phase: " + baseType.getSimpleName()
+            );
+        };
+    }
+
+    private static byte[] getSubRange(BitVal bitVal, byte[] bytes) {
+        final BigInteger bigInteger = getBigInteger(bitVal, bytes);
+        final byte[] packedBytes = bigInteger.toByteArray();
+
+        final boolean littleEndian = bitVal.ordering() == BitOrdering.LITTLE;
+        final byte[] outPackedBytes = littleEndian ? flip(packedBytes) : packedBytes;
+
+        final int neededBytes = (bitVal.len() + 7) / 8;
+        final byte[] result = new byte[neededBytes];
+        System.arraycopy(
+                outPackedBytes, 0, result, result.length - outPackedBytes.length, outPackedBytes.length
+        );
+        return result;
+    }
+
+    private static BigInteger getBigInteger(BitVal bitVal, byte[] bytes) {
+        final boolean littleEndian = bitVal.ordering() == BitOrdering.LITTLE;
+        final byte[] inBytes = littleEndian ? flip(bytes) : bytes;
+
+        final BigInteger mask = BigInteger.ONE
+                .shiftRight(bitVal.len())
+                .subtract(BigInteger.ONE);
+
+        return new BigInteger(1, inBytes)
+                .shiftRight(bitVal.first())
+                .and(mask);
+    }
+
+    private static byte[] flip(byte[] in) {
+        final byte[] result = new byte[in.length];
+        for (int i = 0; i < in.length; i++) {
+            result[i] = in[in.length - 1 - i];
+        }
+        return result;
     }
 
 }
