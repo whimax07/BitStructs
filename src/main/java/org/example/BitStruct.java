@@ -31,14 +31,14 @@ public interface BitStruct {
     static <T extends BitStruct> T decode(Class<T> clazz, byte[] bytes) {
         if (clazz.isEnum()) throw new RuntimeException("Can't populate Enums classes.");
 
-        final ArrayList<Field> bitValFields = Arrays.stream(clazz.getFields())
+        final ArrayList<Field> bitValFields = Arrays.stream(clazz.getDeclaredFields())
                 .filter(not(BitStruct::isStatic))
                 .filter(BitStruct::hasBitValAnnotation)
                 .collect(Collectors.toCollection(ArrayList::new));
         final List<String> fieldNames = bitValFields.stream().map(Field::getName).toList();
 
 
-        final Constructor<?>[] constructors = clazz.getConstructors();
+        final Constructor<?>[] constructors = clazz.getDeclaredConstructors();
         final Constructor<?> constructor = Arrays.stream(constructors)
                 .filter(allFieldConstructor(fieldNames))
                 .findAny()
@@ -167,7 +167,7 @@ public interface BitStruct {
         final byte[] inBytes = littleEndian ? flip(bytes) : bytes;
 
         final BigInteger mask = BigInteger.ONE
-                .shiftRight(bitVal.len())
+                .shiftLeft(bitVal.len())
                 .subtract(BigInteger.ONE);
 
         return new BigInteger(1, inBytes)
