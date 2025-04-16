@@ -26,7 +26,6 @@ public class BitStructTest {
             this.delta1 = delta1;
             this.delta2 = delta2;
         }
-
     }
 
 }
