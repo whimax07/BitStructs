@@ -156,9 +156,24 @@ public interface BitStruct {
 
         final int neededBytes = (bitVal.len() + 7) / 8;
         final byte[] result = new byte[neededBytes];
-        System.arraycopy(
-                outPackedBytes, 0, result, result.length - outPackedBytes.length, outPackedBytes.length
-        );
+
+        /*
+        BigInteger#toByteArray will add a sign bit; this means all 3 of the below situations are possible.
+               t:     # # #         t: # # # # #       t: # # # # #
+               b: # # # # #         b: # # # # #       b:     # # #
+         x, y, z:   0, 2, 3              0, 0, 5            2, 0, 3
+
+         x, y, z -> tStart, bStart, copySize
+
+         tStart = max(len(t) - len(b), 0)
+         bStart = max(len(b) - len(t), 0)
+         copySize = min(len(t), len(b))
+         */
+        final int packedStart = Math.max(outPackedBytes.length - neededBytes, 0);
+        final int resultStart = Math.max(neededBytes - outPackedBytes.length, 0);
+        final int bytesToCopy = Math.min(outPackedBytes.length, neededBytes);
+        System.arraycopy(outPackedBytes, packedStart, result, resultStart, bytesToCopy);
+
         return result;
     }
 
