@@ -17,9 +17,13 @@ public @interface BitDetails {
 
 
 
+    /**
+     * Size in bytes the annotated class takes up when in its bit form. If not set, the value is calculated is the
+     * smallest number of whole bytes needed to fit all fields annotated with {@link BitVal}.
+     */
     int len() default UNSET;
 
-    /** Byte order. */
+    /** Byte order of the class when in bit form. */
     ByteOrdering byteOrdering() default ByteOrdering.BIG;
 
 

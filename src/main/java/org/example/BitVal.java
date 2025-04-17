@@ -11,6 +11,7 @@ public @interface BitVal {
 
     /** First bit of the bit field. */
     int first();
+
     /** Length of the bit field, in bits. */
     int len();
 
