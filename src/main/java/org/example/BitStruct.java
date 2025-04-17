@@ -129,15 +129,6 @@ public interface BitStruct {
         return result;
     }
 
-    private static BigInteger createMask(BitVal bitVal) {
-        // Start with a bit. Move the bit one past the end of the mask. Subtract one to clear the extra bit and set all
-        // bits below to 1. Move the mask into the correct place.
-        return BigInteger.ONE
-                .shiftRight(bitVal.len())
-                .subtract(BigInteger.ONE)
-                .shiftRight(bitVal.len());
-    }
-
     private static <T extends BitStruct> BigInteger valueOf(T self, Field field) {
         field.setAccessible(true);
         final Object object;
@@ -160,6 +151,15 @@ public interface BitStruct {
         }
 
         throw new IllegalStateException("Can't extract a value from type. Field=" + field);
+    }
+
+    private static BigInteger createMask(BitVal bitVal) {
+        // Start with a bit. Move the bit one past the end of the mask. Subtract one to clear the extra bit and set all
+        // bits below to 1. Move the mask into the correct place.
+        return BigInteger.ONE
+                .shiftRight(bitVal.len())
+                .subtract(BigInteger.ONE)
+                .shiftRight(bitVal.len());
     }
 
 
@@ -195,7 +195,7 @@ public interface BitStruct {
             final Field field = bitValFields.get(i);
             final BitVal bitVal = field.getAnnotation(BitVal.class);
             final Class<?> baseType = getBaseType(field.getType());
-            final Object extractedVal = getBitVal(bitVal, bytes, baseType, ordering);
+            final Object extractedVal = extractVal(bitVal, baseType, ordering, bytes);
             constructorArgs[i] = extractedVal;
         }
 
@@ -216,6 +216,7 @@ public interface BitStruct {
             };
         }
 
+        // TODO(Max): Allow enums.
         final boolean isGood = BitStruct.class.isAssignableFrom(type) || isIntType(type);
         if (isGood) return type;
 
@@ -232,7 +233,7 @@ public interface BitStruct {
 
 
 
-    private static Object getBitVal(BitVal bitVal, byte[] bytes, Class<?> baseType, ByteOrdering ordering) {
+    private static Object extractVal(BitVal bitVal, Class<?> baseType, ByteOrdering ordering, byte[] bytes) {
         if (BitStruct.class.isAssignableFrom(baseType)) {
             final byte[] subRange = getSubRange(bitVal, bytes);
             // Restore the byte ordering to big endian so the recursive call does the correct thing.
@@ -242,6 +243,7 @@ public interface BitStruct {
             return BitStruct.decode(bound, bigSubRange);
         }
 
+        // TODO(Max): Allow enums.
         final BigInteger bigInteger = getBigInteger(bitVal, bytes);
         return switch (baseType.getSimpleName()) {
             case "Boolean" -> bigInteger.intValue() != 0;
