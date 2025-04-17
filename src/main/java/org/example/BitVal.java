@@ -14,13 +14,7 @@ public @interface BitVal {
     /** Length of the bit field, in bits. */
     int len();
 
-    BitOrdering ordering() default BitOrdering.BIG;
-
-
-
-    enum BitOrdering {
-        LITTLE,
-        BIG
-    }
+    /** True if the value should NOT be set via deserialization. */
+    boolean constant() default false;
 
 }

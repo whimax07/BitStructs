@@ -1,6 +1,6 @@
 package org.example;
 
-import org.example.BitVal.BitOrdering;
+import org.example.BitDetails.ByteOrdering;
 
 import java.lang.reflect.AccessFlag;
 import java.lang.reflect.Constructor;
@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -21,7 +22,16 @@ import static java.util.function.Predicate.not;
 public interface BitStruct {
 
     default byte[] encode() {
-        return null;
+        final Class<? extends BitStruct> clazz = getClass();
+
+        final List<Field> bitValFields = Arrays.stream(clazz.getDeclaredFields())
+                .filter(not(BitStruct::isStatic))
+                .filter(BitStruct::hasBitValAnnotation)
+                .toList();
+
+        final int size = getByteArraySize(clazz, bitValFields);
+
+        return combineFields(this, bitValFields, size);
     }
 
     default void decodeInitialize(byte[] bytes) {
@@ -34,9 +44,12 @@ public interface BitStruct {
         final ArrayList<Field> bitValFields = Arrays.stream(clazz.getDeclaredFields())
                 .filter(not(BitStruct::isStatic))
                 .filter(BitStruct::hasBitValAnnotation)
+                .filter(BitStruct::notConst)
                 .collect(Collectors.toCollection(ArrayList::new));
         final List<String> fieldNames = bitValFields.stream().map(Field::getName).toList();
 
+        final int size = getByteArraySize(clazz, bitValFields);
+        if (bytes.length < size) throw new RuntimeException("Passed in byte array is to small. Required size: " + size);
 
         final Constructor<?>[] constructors = clazz.getDeclaredConstructors();
         final Constructor<?> constructor = Arrays.stream(constructors)
@@ -49,7 +62,10 @@ public interface BitStruct {
 
         bitValFields.sort(constructorOrdering(constructor));
 
-        final Object[] constructorArgs = constructArgs(bitValFields, bytes);
+        final ByteOrdering ordering = getByteOrdering(clazz);
+        final byte[] truncatedBytes = Arrays.copyOf(bytes, size);
+        final byte[] orderedBytes = (ordering == ByteOrdering.BIG) ? truncatedBytes : flip(truncatedBytes);
+        final Object[] constructorArgs = constructArgs(bitValFields, orderedBytes, ordering);
         constructor.setAccessible(true);
 
         try {
@@ -60,6 +76,8 @@ public interface BitStruct {
         }
     }
 
+
+
     private static boolean isStatic(Field field) {
         return field.accessFlags().contains(AccessFlag.STATIC);
     }
@@ -67,6 +85,84 @@ public interface BitStruct {
     private static boolean hasBitValAnnotation(Field field) {
         return Arrays.stream(field.getAnnotations()).anyMatch(BitVal.class::isInstance);
     }
+
+    private static boolean notConst(Field field) {
+        return Arrays.stream(field.getAnnotations())
+                .filter(BitVal.class::isInstance)
+                .map(BitVal.class::cast)
+                .noneMatch(BitVal::constant);
+    }
+
+    private static int getByteArraySize(Class<? extends BitStruct> clazz, List<Field> bitValFields) {
+        final BitDetails annotation = clazz.getDeclaredAnnotation(BitDetails.class);
+        if (annotation != null && annotation.len() != BitDetails.UNSET) {
+            return annotation.len();
+        }
+
+        // Deduce how bit the
+        final int numBits = bitValFields.stream()
+                .map(field -> field.getDeclaredAnnotation(BitVal.class))
+                .filter(Objects::nonNull)
+                .mapToInt(bitVal -> bitVal.first() + bitVal.len())
+                .max()
+                .orElseThrow(() -> new RuntimeException("No BitVal fields found."));
+
+        return (numBits + 7) / 8;
+    }
+
+
+
+    private static <T extends BitStruct> byte[] combineFields(T self, List<Field> fields, int size) {
+        BigInteger resultVal = BigInteger.ZERO;
+
+        for (Field field : fields) {
+            final BitVal bitVal = field.getAnnotation(BitVal.class);
+            assert bitVal != null;
+            final BigInteger val = valueOf(self, field);
+            final BigInteger positionedVal = val.shiftRight(bitVal.first());
+            final BigInteger mask = createMask(bitVal);
+            resultVal = resultVal.and(mask).or(positionedVal);
+        }
+
+        final byte[] result = new byte[size];
+        injectEnd(result, resultVal.toByteArray());
+        return result;
+    }
+
+    private static BigInteger createMask(BitVal bitVal) {
+        // Start with a bit. Move the bit one past the end of the mask. Subtract one to clear the extra bit and set all
+        // bits below to 1. Move the mask into the correct place.
+        return BigInteger.ONE
+                .shiftRight(bitVal.len())
+                .subtract(BigInteger.ONE)
+                .shiftRight(bitVal.len());
+    }
+
+    private static <T extends BitStruct> BigInteger valueOf(T self, Field field) {
+        field.setAccessible(true);
+        final Object object;
+        try {
+            object = field.get(self);
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException("Failed to get value of field.", e);
+        }
+
+        final Class<?> type = field.getType();
+        if (BitStruct.class.isAssignableFrom(type)) {
+            final BitStruct innerStruct = (BitStruct) object;
+            final byte[] inner = innerStruct.encode();
+            return new BigInteger(inner);
+        }
+
+        if (isIntType(type)) {
+            final Long asLong = (Long) object;
+            return BigInteger.valueOf(asLong);
+        }
+
+        throw new IllegalStateException("Can't extract a value from type. Field=" + field);
+    }
+
+
 
     private static Predicate<Constructor<?>> allFieldConstructor(List<String> fieldNames) {
         return constructor -> allFieldConstructor(constructor, fieldNames);
@@ -87,14 +183,19 @@ public interface BitStruct {
         return Comparator.comparingInt(field -> paramNames.indexOf(field.getName()));
     }
 
-    private static Object[] constructArgs(List<Field> bitValFields, byte[] bytes) {
+    private static <T extends BitStruct> ByteOrdering getByteOrdering(Class<T> clazz) {
+        final BitDetails bitDetails = clazz.getDeclaredAnnotation(BitDetails.class);
+        return (bitDetails != null) ? bitDetails.byteOrdering() : ByteOrdering.BIG;
+    }
+
+    private static Object[] constructArgs(List<Field> bitValFields, byte[] bytes, ByteOrdering ordering) {
         final Object[] constructorArgs = new Object[bitValFields.size()];
 
         for (int i = 0; i < bitValFields.size(); i++) {
             final Field field = bitValFields.get(i);
             final BitVal bitVal = field.getAnnotation(BitVal.class);
             final Class<?> baseType = getBaseType(field.getType());
-            final Object extractedVal = getBitVal(bitVal, bytes, baseType);
+            final Object extractedVal = getBitVal(bitVal, bytes, baseType, ordering);
             constructorArgs[i] = extractedVal;
         }
 
@@ -115,23 +216,30 @@ public interface BitStruct {
             };
         }
 
-        final boolean isGood = BitStruct.class.isAssignableFrom(type)
-                || Boolean.class.equals(type)
-                || Byte.class.equals(type)
-                || Short.class.equals(type)
-                || Integer.class.equals(type)
-                || Long.class.equals(type);
+        final boolean isGood = BitStruct.class.isAssignableFrom(type) || isIntType(type);
         if (isGood) return type;
 
         throw new IllegalStateException("Unsupported type: " + type.getSimpleName());
     }
 
-    private static Object getBitVal(BitVal bitVal, byte[] bytes, Class<?> baseType) {
+    private static boolean isIntType(Class<?> clazz) {
+        return Boolean.class.equals(clazz)
+                || Byte.class.equals(clazz)
+                || Short.class.equals(clazz)
+                || Integer.class.equals(clazz)
+                || Long.class.equals(clazz);
+    }
+
+
+
+    private static Object getBitVal(BitVal bitVal, byte[] bytes, Class<?> baseType, ByteOrdering ordering) {
         if (BitStruct.class.isAssignableFrom(baseType)) {
             final byte[] subRange = getSubRange(bitVal, bytes);
+            // Restore the byte ordering to big endian so the recursive call does the correct thing.
+            final byte[] bigSubRange = (ordering == ByteOrdering.BIG) ? subRange : flip(subRange);
             @SuppressWarnings("unchecked") // Safe by if branch condition.
             final Class<? extends BitStruct> bound = (Class<? extends BitStruct>) baseType;
-            return BitStruct.decode(bound, subRange);
+            return BitStruct.decode(bound, bigSubRange);
         }
 
         final BigInteger bigInteger = getBigInteger(bitVal, bytes);
@@ -151,12 +259,33 @@ public interface BitStruct {
         final BigInteger bigInteger = getBigInteger(bitVal, bytes);
         final byte[] packedBytes = bigInteger.toByteArray();
 
-        final boolean littleEndian = bitVal.ordering() == BitOrdering.LITTLE;
-        final byte[] outPackedBytes = littleEndian ? flip(packedBytes) : packedBytes;
-
         final int neededBytes = (bitVal.len() + 7) / 8;
         final byte[] result = new byte[neededBytes];
+        injectEnd(result, packedBytes);
+        return result;
+    }
 
+    private static BigInteger getBigInteger(BitVal bitVal, byte[] bytes) {
+        final BigInteger mask = BigInteger.ONE
+                .shiftLeft(bitVal.len())
+                .subtract(BigInteger.ONE);
+
+        return new BigInteger(1, bytes)
+                .shiftRight(bitVal.first())
+                .and(mask);
+    }
+
+
+
+    private static byte[] flip(byte[] in) {
+        final byte[] result = new byte[in.length];
+        for (int i = 0; i < in.length; i++) {
+            result[i] = in[in.length - 1 - i];
+        }
+        return result;
+    }
+
+    private static void injectEnd(byte[] base, byte[] toInject) {
         /*
         BigInteger#toByteArray will add a sign bit; this means all 3 of the below situations are possible.
                t:     # # #         t: # # # # #       t: # # # # #
@@ -169,33 +298,10 @@ public interface BitStruct {
          bStart = max(len(b) - len(t), 0)
          copySize = min(len(t), len(b))
          */
-        final int packedStart = Math.max(outPackedBytes.length - neededBytes, 0);
-        final int resultStart = Math.max(neededBytes - outPackedBytes.length, 0);
-        final int bytesToCopy = Math.min(outPackedBytes.length, neededBytes);
-        System.arraycopy(outPackedBytes, packedStart, result, resultStart, bytesToCopy);
-
-        return result;
-    }
-
-    private static BigInteger getBigInteger(BitVal bitVal, byte[] bytes) {
-        final boolean littleEndian = bitVal.ordering() == BitOrdering.LITTLE;
-        final byte[] inBytes = littleEndian ? flip(bytes) : bytes;
-
-        final BigInteger mask = BigInteger.ONE
-                .shiftLeft(bitVal.len())
-                .subtract(BigInteger.ONE);
-
-        return new BigInteger(1, inBytes)
-                .shiftRight(bitVal.first())
-                .and(mask);
-    }
-
-    private static byte[] flip(byte[] in) {
-        final byte[] result = new byte[in.length];
-        for (int i = 0; i < in.length; i++) {
-            result[i] = in[in.length - 1 - i];
-        }
-        return result;
+        final int packedStart = Math.max(toInject.length - base.length, 0);
+        final int resultStart = Math.max(base.length - toInject.length, 0);
+        final int bytesToCopy = Math.min(toInject.length, base.length);
+        System.arraycopy(toInject, packedStart, base, resultStart, bytesToCopy);
     }
 
 }
