@@ -34,10 +34,6 @@ public interface BitStruct {
         return combineFields(this, bitValFields, size);
     }
 
-    default void decodeInitialize(byte[] bytes) {
-
-    }
-
     static <T extends BitStruct> T decode(Class<T> clazz, byte[] bytes) {
         if (clazz.isEnum()) throw new RuntimeException("Can't populate Enums classes.");
 
@@ -62,10 +58,10 @@ public interface BitStruct {
 
         bitValFields.sort(constructorOrdering(constructor));
 
-        final ByteOrdering ordering = getByteOrdering(clazz);
-        final byte[] truncatedBytes = Arrays.copyOf(bytes, size);
-        final byte[] orderedBytes = (ordering == ByteOrdering.BIG) ? truncatedBytes : flip(truncatedBytes);
-        final Object[] constructorArgs = constructArgs(bitValFields, orderedBytes, ordering);
+        final ByteOrdering ordering =  getByteOrdering(clazz);
+        final byte[] orderedBytes = (ordering == ByteOrdering.BIG) ? bytes : flip(bytes);
+        final byte[] truncatedBytes = Arrays.copyOfRange(orderedBytes, bytes.length - size, bytes.length);
+        final Object[] constructorArgs = constructArgs(bitValFields, truncatedBytes, ordering);
         constructor.setAccessible(true);
 
         try {
@@ -119,7 +115,7 @@ public interface BitStruct {
             final BitVal bitVal = field.getAnnotation(BitVal.class);
             assert bitVal != null;
             final BigInteger val = valueOf(self, field);
-            final BigInteger positionedVal = val.shiftRight(bitVal.first());
+            final BigInteger positionedVal = val.shiftLeft(bitVal.first());
             final BigInteger mask = createMask(bitVal);
             resultVal = resultVal.and(mask).or(positionedVal);
         }
@@ -142,12 +138,14 @@ public interface BitStruct {
         if (BitStruct.class.isAssignableFrom(type)) {
             final BitStruct innerStruct = (BitStruct) object;
             final byte[] inner = innerStruct.encode();
-            return new BigInteger(inner);
+            return new BigInteger(1, inner);
         }
 
-        if (isIntType(type)) {
-            final Long asLong = (Long) object;
-            return BigInteger.valueOf(asLong);
+        if (isIntType(object.getClass())) {
+            final Number asNumber = (Number) object;
+            final long asLong = asNumber.longValue();
+            final BigInteger signed = BigInteger.valueOf(asLong);
+            return (asLong >= 0) ? signed : signed.add(BigInteger.ONE.shiftLeft(64));
         }
 
         throw new IllegalStateException("Can't extract a value from type. Field=" + field);
@@ -157,9 +155,10 @@ public interface BitStruct {
         // Start with a bit. Move the bit one past the end of the mask. Subtract one to clear the extra bit and set all
         // bits below to 1. Move the mask into the correct place.
         return BigInteger.ONE
-                .shiftRight(bitVal.len())
+                .shiftLeft(bitVal.len())
                 .subtract(BigInteger.ONE)
-                .shiftRight(bitVal.len());
+                .shiftLeft(bitVal.first())
+                .not();
     }
 
 

@@ -6,6 +6,7 @@ import org.example.BitVal;
 import org.junit.jupiter.api.Test;
 
 import static org.example.Utils.bs;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class NestedBitStructTest {
@@ -19,6 +20,10 @@ public class NestedBitStructTest {
         assertEquals(0xa, decoded.nested.firstChunk);
         assertEquals(0xcba, decoded.nested.secondChunk);
         assertEquals(1, decoded.lastBit);
+
+        final byte[] encoded = decoded.encode();
+        final byte[] expected = bs(0x10, 0xcb, 0xaa, 0x12, 0x3);
+        assertArrayEquals(expected, encoded);
     }
 
     @AllArgsConstructor
