@@ -95,7 +95,7 @@ public interface BitStruct {
             return annotation.len();
         }
 
-        // Deduce how bit the
+        // Deduce how bit the struct takes up by finding the largest BitVal field.
         final int numBits = bitValFields.stream()
                 .map(field -> field.getDeclaredAnnotation(BitVal.class))
                 .filter(Objects::nonNull)
@@ -122,7 +122,8 @@ public interface BitStruct {
 
         final byte[] result = new byte[size];
         injectEnd(result, resultVal.toByteArray());
-        return result;
+        final ByteOrdering ordering = getByteOrdering(self.getClass());
+        return (ordering == ByteOrdering.BIG) ? result : flip(result);
     }
 
     private static <T extends BitStruct> BigInteger valueOf(T self, Field field) {
