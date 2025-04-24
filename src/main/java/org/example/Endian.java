@@ -10,19 +10,13 @@ public class Endian {
 
         Ray rightShift(int by);
 
-        Ray and(Ray other);
-
         Ray and(Ray other, int resultSizeBytes);
-
-        Ray or(Ray other);
 
         Ray or(Ray other, int resultSizeBytes);
 
-        Ray swapView();
-
         byte[] asByteArray();
 
-        byte[] leastSignicant(int length);
+        byte[] leastSignificant(int length);
     }
 
 
@@ -45,6 +39,18 @@ public class Endian {
 
 
 
+        public LBI and(LBI other) {
+            return new LBI(value.and(other.value));
+        }
+
+        public LBI or(LBI other) {
+            return new LBI(value.or(other.value));
+        }
+
+        public BBI swapView() {
+            return new BBI(asByteArray());
+        }
+
         @Override
         public Ray leftShift(int by) {
             return new LBI(value.shiftLeft(by));
@@ -56,41 +62,33 @@ public class Endian {
         }
 
         @Override
-        public Ray and(Ray other) {
-            return new LBI(value.and(((LBI) other).value));
-        }
-
-        @Override
         public Ray and(Ray other, int resultSizeBytes) {
             // TODO(Max): Truncate output if to long.
-            if (other instanceof LBI) return and(other);
+            if (other instanceof LBI otherLbi) return and(otherLbi);
 
             final byte[] littleBytes = Arrays.copyOf(asByteArray(), resultSizeBytes);
 
             final byte[] bigBytes = other.asByteArray();
-            for (int i = 0; i < Math.max(bigBytes.length, resultSizeBytes); i++) {
-                littleBytes[littleBytes.length - 1 - i] |= bigBytes[i];
+            for (int i = 0; i < Math.min(bigBytes.length, resultSizeBytes); i++) {
+                littleBytes[littleBytes.length - 1 - i] &= bigBytes[i];
             }
 
             return new LBI(littleBytes);
         }
 
         @Override
-        public Ray or(Ray other) {
-            return new LBI(value.or(((LBI) other).value));
-        }
-
-        @Override
         public Ray or(Ray other, int resultSizeBytes) {
             // TODO(Max): Truncate output if to long.
-            if (other instanceof LBI) return or(other);
+            if (other instanceof LBI otherLbi) return or(otherLbi);
 
-            return null;
-        }
+            final byte[] littleBytes = Arrays.copyOf(asByteArray(), resultSizeBytes);
 
-        @Override
-        public Ray swapView() {
-            return BBI.fromBytes(asByteArray());
+            final byte[] bigBytes = other.asByteArray();
+            for (int i = 0; i < Math.min(bigBytes.length, resultSizeBytes); i++) {
+                littleBytes[littleBytes.length - 1 - i] |= bigBytes[i];
+            }
+
+            return new LBI(littleBytes);
         }
 
         @Override
@@ -99,7 +97,7 @@ public class Endian {
         }
 
         @Override
-        public byte[] leastSignicant(int length) {
+        public byte[] leastSignificant(int length) {
             final byte[] bytes = asByteArray();
             return Arrays.copyOf(bytes, length);
         }
@@ -125,8 +123,16 @@ public class Endian {
 
 
 
-        private static BBI fromBytes(byte[] bytes) {
-            return new BBI(new BigInteger(1, bytes));
+        public BBI and(BBI other) {
+            return new BBI(value.and(other.value));
+        }
+
+        public BBI or(BBI other) {
+            return new BBI(value.or(other.value));
+        }
+
+        public LBI swapView() {
+            return new LBI(asByteArray());
         }
 
         @Override
@@ -140,34 +146,25 @@ public class Endian {
         }
 
         @Override
-        public Ray and(Ray other) {
-            return new BBI(value.and(((BBI) other).value));
-        }
-
-        @Override
         public Ray and(Ray other, int resultSizeBytes) {
             // TODO(Max): Truncate output if to long.
-            if (other instanceof BBI) return and(other);
+            if (other instanceof BBI otherBbi) return and(otherBbi);
 
-            return other.and(this, resultSizeBytes).swapView();
-        }
+            final Ray anded = other.and(this, resultSizeBytes);
+            if (anded instanceof LBI andedLbi) return andedLbi.swapView();
 
-        @Override
-        public Ray or(Ray other) {
-            return new BBI(value.or(((BBI) other).value));
+            throw new IllegalStateException("other should only be either an LBI or a BBI.");
         }
 
         @Override
         public Ray or(Ray other, int resultSizeBytes) {
             // TODO(Max): Truncate output if to long.
-            if (other instanceof BBI) return or(other);
+            if (other instanceof BBI otherBbi) return or(otherBbi);
 
-            return other.or(this, resultSizeBytes).swapView();
-        }
+            final Ray ored = other.or(this, resultSizeBytes);
+            if (ored instanceof LBI oredLbi) return oredLbi.swapView();
 
-        @Override
-        public Ray swapView() {
-            return new LBI(asByteArray());
+            throw new IllegalStateException("other should only be either an LBI or a BBI.");
         }
 
         @Override
@@ -176,7 +173,7 @@ public class Endian {
         }
 
         @Override
-        public byte[] leastSignicant(int length) {
+        public byte[] leastSignificant(int length) {
             final byte[] bytes = asByteArray();
 
             if (bytes.length == length) return bytes;
