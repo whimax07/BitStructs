@@ -21,25 +21,29 @@ public class Endian {
         Ray swapView();
 
         byte[] asByteArray();
+
+        byte[] leastSignicant(int length);
     }
 
 
 
     public static class LBI implements Ray {
+        public static final LBI ZERO = new LBI(BigInteger.ZERO);
+        public static final LBI ONE = new LBI(BigInteger.ONE);
+
         private final BigInteger value;
+
+
 
         private LBI(BigInteger value) {
             this.value = value;
         }
 
-        public static LBI ONE() {
-            return new LBI(BigInteger.ONE);
+        public LBI(byte[] bytes) {
+            this(new BigInteger(flip(bytes)));
         }
 
-        private static LBI fromBytes(byte[] bytes) {
-            final byte[] flipped = flip(bytes);
-            return new LBI(new BigInteger(flipped));
-        }
+
 
         @Override
         public Ray leftShift(int by) {
@@ -68,7 +72,7 @@ public class Endian {
                 littleBytes[littleBytes.length - 1 - i] |= bigBytes[i];
             }
 
-            return LBI.fromBytes(littleBytes);
+            return new LBI(littleBytes);
         }
 
         @Override
@@ -93,20 +97,33 @@ public class Endian {
         public byte[] asByteArray() {
             return flip(value.toByteArray());
         }
+
+        @Override
+        public byte[] leastSignicant(int length) {
+            final byte[] bytes = asByteArray();
+            return Arrays.copyOf(bytes, length);
+        }
     }
 
 
 
     public static class BBI implements Ray {
+        public static final BBI ZERO = new BBI(BigInteger.ZERO);
+        public static final BBI ONE = new BBI(BigInteger.ONE);
+
         private final BigInteger value;
+
+
 
         private BBI(BigInteger value) {
             this.value = value;
         }
 
-        public static BBI ONE() {
-            return new BBI(BigInteger.ONE);
+        public BBI(byte[] bytes) {
+            this(new BigInteger(bytes));
         }
+
+
 
         private static BBI fromBytes(byte[] bytes) {
             return new BBI(new BigInteger(1, bytes));
@@ -150,12 +167,24 @@ public class Endian {
 
         @Override
         public Ray swapView() {
-            return LBI.fromBytes(asByteArray());
+            return new LBI(asByteArray());
         }
 
         @Override
         public byte[] asByteArray() {
             return value.toByteArray();
+        }
+
+        @Override
+        public byte[] leastSignicant(int length) {
+            final byte[] bytes = asByteArray();
+
+            if (bytes.length == length) return bytes;
+            if (bytes.length > length) return Arrays.copyOfRange(bytes, bytes.length - length, bytes.length);
+
+            final byte[] out = new byte[length];
+            System.arraycopy(bytes, 0, out, length - bytes.length, bytes.length);
+            return out;
         }
     }
 

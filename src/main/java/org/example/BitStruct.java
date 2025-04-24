@@ -1,6 +1,9 @@
 package org.example;
 
 import org.example.BitDetails.ByteOrdering;
+import org.example.Endian.BBI;
+import org.example.Endian.LBI;
+import org.example.Endian.Ray;
 
 import java.lang.reflect.AccessFlag;
 import java.lang.reflect.Constructor;
@@ -110,7 +113,7 @@ public interface BitStruct {
 
     private static <T extends BitStruct> byte[] combineFields(T self, List<Field> fields, int size) {
         final ByteOrdering ordering = getByteOrdering(self.getClass());
-        BigInteger resultVal = BigInteger.ZERO;
+        Ray resultVal = (ordering == ByteOrdering.BIG) ? BBI.ZERO : LBI.ZERO;
 
         for (Field field : fields) {
             resultVal = combineField(self, field, ordering, resultVal, size);
@@ -123,8 +126,8 @@ public interface BitStruct {
         return Arrays.copyOfRange(byteArray, byteArray.length - size, byteArray.length);
     }
 
-    private static <T extends BitStruct> BigInteger combineField(
-            T self, Field field, ByteOrdering ordering, BigInteger resultVal, int size
+    private static <T extends BitStruct> Ray combineField(
+            T self, Field field, ByteOrdering ordering, Ray resultVal, int size
     ) {
         final BitVal bitVal = field.getAnnotation(BitVal.class);
         assert bitVal != null;
