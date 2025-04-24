@@ -7,9 +7,10 @@ import org.example.BitVal;
 import org.junit.jupiter.api.Test;
 
 import static org.example.Utils.bs;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class NestedOrderingTes {
+public class NestedOrderingTest {
 
     @Test
     public void nestedOrdering() {

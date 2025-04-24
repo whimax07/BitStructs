@@ -109,24 +109,46 @@ public interface BitStruct {
 
 
     private static <T extends BitStruct> byte[] combineFields(T self, List<Field> fields, int size) {
+        final ByteOrdering ordering = getByteOrdering(self.getClass());
         BigInteger resultVal = BigInteger.ZERO;
 
         for (Field field : fields) {
-            final BitVal bitVal = field.getAnnotation(BitVal.class);
-            assert bitVal != null;
-            final BigInteger val = valueOf(self, field);
-            final BigInteger positionedVal = val.shiftLeft(bitVal.first());
-            final BigInteger mask = createMask(bitVal);
-            resultVal = resultVal.and(mask).or(positionedVal);
+            resultVal = combineField(self, field, ordering, resultVal, size);
         }
 
-        final byte[] result = new byte[size];
-        injectEnd(result, resultVal.toByteArray());
-        final ByteOrdering ordering = getByteOrdering(self.getClass());
-        return (ordering == ByteOrdering.BIG) ? result : flip(result);
+        // Or in a guard so the returned byte array is at least as large as the required result array, so we can copy
+        // from the end of the array.
+        resultVal = BigInteger.ONE.shiftLeft(size * 8).or(resultVal);
+        final byte[] byteArray = resultVal.toByteArray();
+        return Arrays.copyOfRange(byteArray, byteArray.length - size, byteArray.length);
     }
 
-    private static <T extends BitStruct> BigInteger valueOf(T self, Field field) {
+    private static <T extends BitStruct> BigInteger combineField(
+            T self, Field field, ByteOrdering ordering, BigInteger resultVal, int size
+    ) {
+        final BitVal bitVal = field.getAnnotation(BitVal.class);
+        assert bitVal != null;
+
+        final int first;
+        if (ordering == ByteOrdering.BIG) {
+            first = bitVal.first();
+        } else {
+            final int numBits = size * 8;
+            first = numBits - (bitVal.first() + bitVal.len() + 1);
+        }
+
+        // Cascade the bits to the left of bitVal.len() high when one is subtracted.
+        final BigInteger valueMask = BigInteger.ONE.shiftLeft(bitVal.len())
+                .subtract(BigInteger.ONE)
+                .shiftLeft(first);
+        final BigInteger insertMask = valueMask.not();
+
+        final BigInteger val = valueOf(self, field, ordering, bitVal.len());
+        final BigInteger positionedVal = val.shiftLeft(first).and(valueMask);
+        return resultVal.and(insertMask).or(positionedVal);
+    }
+
+    private static <T extends BitStruct> BigInteger valueOf(T self, Field field, ByteOrdering ordering, int len) {
         field.setAccessible(true);
         final Object object;
         try {
@@ -139,27 +161,31 @@ public interface BitStruct {
         if (BitStruct.class.isAssignableFrom(type)) {
             final BitStruct innerStruct = (BitStruct) object;
             final byte[] inner = innerStruct.encode();
-            return new BigInteger(1, inner);
+            final BigInteger value = new BigInteger(1, inner);
+            return (ordering == ByteOrdering.BIG) ? value : value.shiftRight((inner.length * 8) - len);
         }
 
         if (isIntType(object.getClass())) {
             final Number asNumber = (Number) object;
             final long asLong = asNumber.longValue();
-            final BigInteger signed = BigInteger.valueOf(asLong);
-            return (asLong >= 0) ? signed : signed.add(BigInteger.ONE.shiftLeft(64));
+
+            if (ordering == ByteOrdering.BIG) {
+                final byte[] asBytes = toBytes(asLong);
+                return new BigInteger(1, asBytes);
+            }
+
+            final long mask = BigInteger.ONE
+                    .shiftLeft(len)
+                    .subtract(BigInteger.ONE)
+                    .longValue();
+            final long sized = asLong & mask;
+            final byte[] asBytes = flip(toBytes(sized));
+
+            final BigInteger bigInteger = new BigInteger(1, asBytes);
+            return bigInteger.shiftRight((asBytes.length * 8) - len);
         }
 
         throw new IllegalStateException("Can't extract a value from type. Field=" + field);
-    }
-
-    private static BigInteger createMask(BitVal bitVal) {
-        // Start with a bit. Move the bit one past the end of the mask. Subtract one to clear the extra bit and set all
-        // bits below to 1. Move the mask into the correct place.
-        return BigInteger.ONE
-                .shiftLeft(bitVal.len())
-                .subtract(BigInteger.ONE)
-                .shiftLeft(bitVal.first())
-                .not();
     }
 
 
@@ -278,6 +304,19 @@ public interface BitStruct {
     }
 
 
+
+    private static byte[] toBytes(long toConvert) {
+        return new byte[] {
+                (byte) (toConvert >> 56 & 0xff),
+                (byte) (toConvert >> 48 & 0xff),
+                (byte) (toConvert >> 40 & 0xff),
+                (byte) (toConvert >> 32 & 0xff),
+                (byte) (toConvert >> 24 & 0xff),
+                (byte) (toConvert >> 16 & 0xff),
+                (byte) (toConvert >> 8 & 0xff),
+                (byte) (toConvert & 0xff)
+        };
+    }
 
     private static byte[] flip(byte[] in) {
         final byte[] result = new byte[in.length];
