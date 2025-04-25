@@ -36,11 +36,11 @@ public class Endian {
         }
 
         public LBI(byte[] bytes) {
-            this(new BigInteger(flip(bytes)));
+            this(new BigInteger(bytes));
         }
 
         public LBI(long val) {
-            this(BigInteger.valueOf(Long.reverseBytes(val)));
+            this(BigInteger.valueOf(val));
         }
 
 

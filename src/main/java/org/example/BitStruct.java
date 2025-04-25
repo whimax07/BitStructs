@@ -61,7 +61,7 @@ public interface BitStruct {
 
         bitValFields.sort(constructorOrdering(constructor));
 
-        final ByteOrdering ordering =  getByteOrdering(clazz);
+        final ByteOrdering ordering = getByteOrdering(clazz);
         final byte[] orderedBytes = (ordering == ByteOrdering.BIG) ? bytes : flip(bytes);
         final byte[] truncatedBytes = Arrays.copyOfRange(orderedBytes, bytes.length - size, bytes.length);
         final Object[] constructorArgs = constructArgs(bitValFields, truncatedBytes, ordering);
@@ -135,7 +135,7 @@ public interface BitStruct {
             final LBI bitValRay = (LBI) valueOf(self, field, ordering);
 
             final LBI mask = LBI.ONE.leftShift(bitVal.len()).subtract(LBI.ONE);
-            final LBI positionedVal = bitValRay.add(mask).leftShift(bitVal.first());
+            final LBI positionedVal = bitValRay.and(mask).leftShift(bitVal.first());
 
             final LBI insertMask = mask.leftShift(bitVal.first()).not();
             acculator = acculator.and(insertMask).or(positionedVal);
@@ -154,7 +154,7 @@ public interface BitStruct {
             final BBI bitValRay = (BBI) valueOf(self, field, ordering);
 
             final BBI mask = BBI.ONE.leftShift(bitVal.len()).subtract(BBI.ONE);
-            final BBI positionedVal = bitValRay.add(mask).leftShift(bitVal.first());
+            final BBI positionedVal = bitValRay.and(mask).leftShift(bitVal.first());
 
             final BBI insertMask = mask.leftShift(bitVal.first()).not();
             acculator = acculator.and(insertMask).or(positionedVal);
@@ -176,7 +176,9 @@ public interface BitStruct {
         if (BitStruct.class.isAssignableFrom(type)) {
             final BitStruct innerStruct = (BitStruct) object;
             final byte[] inner = innerStruct.encode();
-            return (ordering == ByteOrdering.BIG) ? new BBI(inner) : new LBI(inner);
+            // The constructors expect "Big Endian" ordering.
+            final byte[] orderedInner = (ordering == ByteOrdering.BIG) ? inner : flip(inner);
+            return (ordering == ByteOrdering.BIG) ? new BBI(orderedInner) : new LBI(orderedInner);
         }
 
         if (isIntType(object.getClass())) {
@@ -261,11 +263,12 @@ public interface BitStruct {
 
     private static Object extractVal(BitVal bitVal, Class<?> baseType, ByteOrdering ordering, byte[] bytes) {
         if (BitStruct.class.isAssignableFrom(baseType)) {
+            @SuppressWarnings("unchecked") // Safe by if branch condition.
+            final Class<? extends BitStruct> bound = (Class<? extends BitStruct>) baseType;
+
             final byte[] subRange = getSubRange(bitVal, bytes);
             // Restore the byte ordering to big endian so the recursive call does the correct thing.
             final byte[] bigSubRange = (ordering == ByteOrdering.BIG) ? subRange : flip(subRange);
-            @SuppressWarnings("unchecked") // Safe by if branch condition.
-            final Class<? extends BitStruct> bound = (Class<? extends BitStruct>) baseType;
             return BitStruct.decode(bound, bigSubRange);
         }
 
