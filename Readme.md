@@ -22,6 +22,9 @@ assertEquals(   0, decoded.currentPowerUpReg.empty);
 
 assertEquals(   2, decoded.statusReg.status);
 assertEquals(  15, decoded.statusReg.date);
+
+final byte[] encoded = decoded.encode();
+assertArrayEquals(bytes, encoded);
 ```
 
 ### Backing Classes
