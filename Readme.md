@@ -3,7 +3,7 @@ A helper library for defining, serializing and deserializing bit-level structure
 
 This is largely a pseudocode implementation given it is not backed by compile time processing, enabling type checking and performance gains.
 
-The libary has nice integration with Lombok.
+The library has nice integration with Lombok. You can use records instead of lombok but the annotations can make it hard to read.
 
 ## Example
 This is a ruff example of how you might model a few registers.

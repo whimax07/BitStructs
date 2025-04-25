@@ -100,14 +100,10 @@ public class NestedOrderingTest {
     }
 
     @BitDetails(len = 4, byteOrdering = BitDetails.ByteOrdering.LITTLE)
-    @AllArgsConstructor
-    public static class CurrentPowerUpReg implements BitStruct {
-        @BitVal(first = 0, len = 7)
-        private byte currentState;
-
-        @BitVal(first = 7, len = 25)
-        private int empty;
-    }
+    public record CurrentPowerUpReg(
+            @BitVal(first = 0, len = 7) byte currentState,
+            @BitVal(first = 7, len = 25) int empty
+    ) implements BitStruct { }
 
     @BitDetails(len = 4, byteOrdering = BitDetails.ByteOrdering.BIG)
     @AllArgsConstructor
