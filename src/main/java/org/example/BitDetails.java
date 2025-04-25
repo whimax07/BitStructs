@@ -5,6 +5,11 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+/**
+ * Use this annotation to define the structure of the serialized form of a {@link BitStruct}.
+ *
+ * @author Whimax07
+ */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface BitDetails {

@@ -3,8 +3,14 @@ package org.example;
 import java.math.BigInteger;
 import java.util.Arrays;
 
+/**
+ * A private helper class for the provided implementation of {@link BitStruct#decode}.
+ *
+ * @author Whimax07
+ */
 public class Endian {
 
+    /** An endian agnostic array of bits. */
     public interface Ray {
         Ray not();
 
@@ -23,6 +29,7 @@ public class Endian {
 
 
 
+    /** A little endian array of bits. */
     public static class LBI implements Ray {
         public static final LBI ZERO = new LBI(BigInteger.ZERO);
         public static final LBI ONE = new LBI(BigInteger.ONE);
@@ -128,6 +135,7 @@ public class Endian {
 
 
 
+    /** A big endian array of bits. */
     public static class BBI implements Ray {
         public static final BBI ZERO = new BBI(BigInteger.ZERO);
         public static final BBI ONE = new BBI(BigInteger.ONE);

@@ -5,6 +5,11 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+/**
+ * Use this annotation to define a bit field in a {@link BitStruct}.
+ *
+ * @author Whimax07
+ */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)
 public @interface BitVal {

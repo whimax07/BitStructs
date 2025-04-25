@@ -22,10 +22,38 @@ import java.util.stream.Collectors;
 
 import static java.util.function.Predicate.not;
 
+/**
+ * Implement this interface to add serialization and deserialization for fields marked with {@link BitVal}.
+ *
+ * @author Whimax07
+ */
 public interface BitStruct {
 
+    // =================================================================================================================
+    // ===> Public interface.
+
+    /**
+     * Serialize fields marked with {@link BitVal} according to the parameter defined by {@link BitDetails} recursively.
+     */
     default byte[] encode() {
-        final Class<? extends BitStruct> clazz = getClass();
+        return encodeImpl(this);
+    }
+
+    /**
+     * Deserialize fields marked with {@link BitVal} according to the parameter defined by {@link BitDetails}
+     * recursively.
+     */
+    static <T extends BitStruct> T decode(Class<T> clazz, byte[] bytes) {
+        return decodeImpl(clazz, bytes);
+    }
+
+
+
+    // =================================================================================================================
+    // ===> Private implementation.
+
+    private static byte[] encodeImpl(BitStruct self) {
+        final Class<? extends BitStruct> clazz = self.getClass();
 
         final List<Field> bitValFields = Arrays.stream(clazz.getDeclaredFields())
                 .filter(not(BitStruct::isStatic))
@@ -34,10 +62,44 @@ public interface BitStruct {
 
         final int size = getByteArraySize(clazz, bitValFields);
 
-        return combineFields(this, bitValFields, size);
+        return combineFields(self, bitValFields, size);
     }
 
-    static <T extends BitStruct> T decode(Class<T> clazz, byte[] bytes) {
+    private static boolean isStatic(Field field) {
+        return field.accessFlags().contains(AccessFlag.STATIC);
+    }
+
+    private static boolean hasBitValAnnotation(Field field) {
+        return Arrays.stream(field.getAnnotations()).anyMatch(BitVal.class::isInstance);
+    }
+
+    private static boolean notConst(Field field) {
+        return Arrays.stream(field.getAnnotations())
+                .filter(BitVal.class::isInstance)
+                .map(BitVal.class::cast)
+                .noneMatch(BitVal::constant);
+    }
+
+    private static int getByteArraySize(Class<? extends BitStruct> clazz, List<Field> bitValFields) {
+        final BitDetails annotation = clazz.getDeclaredAnnotation(BitDetails.class);
+        if (annotation != null && annotation.len() != BitDetails.UNSET) {
+            return annotation.len();
+        }
+
+        // Deduce how bit the struct takes up by finding the largest BitVal field.
+        final int numBits = bitValFields.stream()
+                .map(field -> field.getDeclaredAnnotation(BitVal.class))
+                .filter(Objects::nonNull)
+                .mapToInt(bitVal -> bitVal.first() + bitVal.len())
+                .max()
+                .orElseThrow(() -> new RuntimeException("No BitVal fields found."));
+
+        return (numBits + 7) / 8;
+    }
+
+
+
+    private static <T extends BitStruct> T decodeImpl(Class<T> clazz, byte[] bytes) {
         if (clazz.isEnum()) throw new RuntimeException("Can't populate Enums classes.");
 
         final ArrayList<Field> bitValFields = Arrays.stream(clazz.getDeclaredFields())
@@ -74,42 +136,6 @@ public interface BitStruct {
             throw new RuntimeException(e);
         }
     }
-
-
-
-    private static boolean isStatic(Field field) {
-        return field.accessFlags().contains(AccessFlag.STATIC);
-    }
-
-    private static boolean hasBitValAnnotation(Field field) {
-        return Arrays.stream(field.getAnnotations()).anyMatch(BitVal.class::isInstance);
-    }
-
-    private static boolean notConst(Field field) {
-        return Arrays.stream(field.getAnnotations())
-                .filter(BitVal.class::isInstance)
-                .map(BitVal.class::cast)
-                .noneMatch(BitVal::constant);
-    }
-
-    private static int getByteArraySize(Class<? extends BitStruct> clazz, List<Field> bitValFields) {
-        final BitDetails annotation = clazz.getDeclaredAnnotation(BitDetails.class);
-        if (annotation != null && annotation.len() != BitDetails.UNSET) {
-            return annotation.len();
-        }
-
-        // Deduce how bit the struct takes up by finding the largest BitVal field.
-        final int numBits = bitValFields.stream()
-                .map(field -> field.getDeclaredAnnotation(BitVal.class))
-                .filter(Objects::nonNull)
-                .mapToInt(bitVal -> bitVal.first() + bitVal.len())
-                .max()
-                .orElseThrow(() -> new RuntimeException("No BitVal fields found."));
-
-        return (numBits + 7) / 8;
-    }
-
-
 
     private static <T extends BitStruct> byte[] combineFields(T self, List<Field> fields, int size) {
         final ByteOrdering ordering = getByteOrdering(self.getClass());
