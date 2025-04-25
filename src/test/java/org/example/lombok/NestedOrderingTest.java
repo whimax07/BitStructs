@@ -85,6 +85,7 @@ public class NestedOrderingTest {
     }
 
 
+
     @BitDetails(len = 4, byteOrdering = BitDetails.ByteOrdering.LITTLE)
     @AllArgsConstructor
     public static class PwrUp0 implements BitStruct {

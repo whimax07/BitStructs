@@ -239,17 +239,4 @@ public class Endian {
         return result;
     }
 
-    private static byte[] toBytes(long toConvert) {
-        return new byte[] {
-                (byte) (toConvert >> 56 & 0xff),
-                (byte) (toConvert >> 48 & 0xff),
-                (byte) (toConvert >> 40 & 0xff),
-                (byte) (toConvert >> 32 & 0xff),
-                (byte) (toConvert >> 24 & 0xff),
-                (byte) (toConvert >> 16 & 0xff),
-                (byte) (toConvert >> 8 & 0xff),
-                (byte) (toConvert & 0xff)
-        };
-    }
-
 }
