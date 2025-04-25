@@ -26,8 +26,6 @@ public @interface BitDetails {
     /** Byte order of the class when in bit form. */
     ByteOrdering byteOrdering() default ByteOrdering.BIG;
 
-    // TODO(Max): Add word size?
-
 
 
     enum ByteOrdering {

@@ -82,8 +82,10 @@ public class Endian {
 
         @Override
         public Ray and(Ray other, int resultSizeBytes) {
-            // TODO(Max): Truncate output if to long.
-            if (other instanceof LBI otherLbi) return and(otherLbi);
+            if (other instanceof LBI otherLbi) {
+                final LBI mask = ONE.leftShift(resultSizeBytes * 8).subtract(ONE);
+                return and(otherLbi).and(mask);
+            }
 
             final byte[] littleBytes = Arrays.copyOf(asByteArray(), resultSizeBytes);
 
@@ -97,8 +99,10 @@ public class Endian {
 
         @Override
         public Ray or(Ray other, int resultSizeBytes) {
-            // TODO(Max): Truncate output if to long.
-            if (other instanceof LBI otherLbi) return or(otherLbi);
+            if (other instanceof LBI otherLbi) {
+                final LBI mask = ONE.leftShift(resultSizeBytes * 8).subtract(ONE);
+                return or(otherLbi).and(mask);
+            }
 
             final byte[] littleBytes = Arrays.copyOf(asByteArray(), resultSizeBytes);
 
@@ -183,8 +187,10 @@ public class Endian {
 
         @Override
         public Ray and(Ray other, int resultSizeBytes) {
-            // TODO(Max): Truncate output if to long.
-            if (other instanceof BBI otherBbi) return and(otherBbi);
+            if (other instanceof BBI otherBbi) {
+                final BBI mask = ONE.leftShift(resultSizeBytes * 8).subtract(ONE);
+                return and(otherBbi).and(mask);
+            }
 
             final Ray anded = other.and(this, resultSizeBytes);
             if (anded instanceof LBI andedLbi) return andedLbi.swapView();
@@ -194,8 +200,10 @@ public class Endian {
 
         @Override
         public Ray or(Ray other, int resultSizeBytes) {
-            // TODO(Max): Truncate output if to long.
-            if (other instanceof BBI otherBbi) return or(otherBbi);
+            if (other instanceof BBI otherBbi) {
+                final BBI mask = ONE.leftShift(resultSizeBytes * 8).subtract(ONE);
+                return or(otherBbi).and(mask);
+            }
 
             final Ray ored = other.or(this, resultSizeBytes);
             if (ored instanceof LBI oredLbi) return oredLbi.swapView();
