@@ -113,45 +113,57 @@ public interface BitStruct {
 
     private static <T extends BitStruct> byte[] combineFields(T self, List<Field> fields, int size) {
         final ByteOrdering ordering = getByteOrdering(self.getClass());
-        Ray resultVal = (ordering == ByteOrdering.BIG) ? BBI.ZERO : LBI.ZERO;
+
+        if (ordering != ByteOrdering.BIG && ordering != ByteOrdering.LITTLE) {
+            throw new IllegalStateException("Unknown byte ordering: " + ordering);
+        }
+
+        final Ray ray = (ordering == ByteOrdering.BIG) ?
+                combineFieldsBigEndian(self, fields, ordering) :
+                combineFieldsLittleEndian(self, fields, ordering);
+
+        return ray.leastSignificant(size);
+    }
+
+    private static <T extends BitStruct> LBI combineFieldsLittleEndian(T self, List<Field> fields, ByteOrdering ordering) {
+        LBI acculator = LBI.ZERO;
 
         for (Field field : fields) {
-            resultVal = combineField(self, field, ordering, resultVal, size);
+            final BitVal bitVal = field.getAnnotation(BitVal.class);
+            assert bitVal != null;
+            // This cast is the main reason for LBI and BBI to exist.
+            final LBI bitValRay = (LBI) valueOf(self, field, ordering);
+
+            final LBI mask = LBI.ONE.leftShift(bitVal.len()).subtract(LBI.ONE);
+            final LBI positionedVal = bitValRay.add(mask).leftShift(bitVal.first());
+
+            final LBI insertMask = mask.leftShift(bitVal.first()).not();
+            acculator = acculator.and(insertMask).or(positionedVal);
         }
 
-        // Or in a guard so the returned byte array is at least as large as the required result array, so we can copy
-        // from the end of the array.
-        resultVal = BigInteger.ONE.shiftLeft(size * 8).or(resultVal);
-        final byte[] byteArray = resultVal.toByteArray();
-        return Arrays.copyOfRange(byteArray, byteArray.length - size, byteArray.length);
+        return acculator;
     }
 
-    private static <T extends BitStruct> Ray combineField(
-            T self, Field field, ByteOrdering ordering, Ray resultVal, int size
-    ) {
-        final BitVal bitVal = field.getAnnotation(BitVal.class);
-        assert bitVal != null;
+    private static <T extends BitStruct> BBI combineFieldsBigEndian(T self, List<Field> fields, ByteOrdering ordering) {
+        BBI acculator = BBI.ZERO;
 
-        final int first;
-        if (ordering == ByteOrdering.BIG) {
-            first = bitVal.first();
-        } else {
-            final int numBits = size * 8;
-            first = numBits - (bitVal.first() + bitVal.len() + 1);
+        for (Field field : fields) {
+            final BitVal bitVal = field.getAnnotation(BitVal.class);
+            assert bitVal != null;
+            // This cast is the main reason for LBI and BBI to exist.
+            final BBI bitValRay = (BBI) valueOf(self, field, ordering);
+
+            final BBI mask = BBI.ONE.leftShift(bitVal.len()).subtract(BBI.ONE);
+            final BBI positionedVal = bitValRay.add(mask).leftShift(bitVal.first());
+
+            final BBI insertMask = mask.leftShift(bitVal.first()).not();
+            acculator = acculator.and(insertMask).or(positionedVal);
         }
 
-        // Cascade the bits to the left of bitVal.len() high when one is subtracted.
-        final BigInteger valueMask = BigInteger.ONE.shiftLeft(bitVal.len())
-                .subtract(BigInteger.ONE)
-                .shiftLeft(first);
-        final BigInteger insertMask = valueMask.not();
-
-        final BigInteger val = valueOf(self, field, ordering, bitVal.len());
-        final BigInteger positionedVal = val.shiftLeft(first).and(valueMask);
-        return resultVal.and(insertMask).or(positionedVal);
+        return acculator;
     }
 
-    private static <T extends BitStruct> BigInteger valueOf(T self, Field field, ByteOrdering ordering, int len) {
+    private static <T extends BitStruct> Ray valueOf(T self, Field field, ByteOrdering ordering) {
         field.setAccessible(true);
         final Object object;
         try {
@@ -164,28 +176,13 @@ public interface BitStruct {
         if (BitStruct.class.isAssignableFrom(type)) {
             final BitStruct innerStruct = (BitStruct) object;
             final byte[] inner = innerStruct.encode();
-            final BigInteger value = new BigInteger(1, inner);
-            return (ordering == ByteOrdering.BIG) ? value : value.shiftRight((inner.length * 8) - len);
+            return (ordering == ByteOrdering.BIG) ? new BBI(inner) : new LBI(inner);
         }
 
         if (isIntType(object.getClass())) {
             final Number asNumber = (Number) object;
             final long asLong = asNumber.longValue();
-
-            if (ordering == ByteOrdering.BIG) {
-                final byte[] asBytes = toBytes(asLong);
-                return new BigInteger(1, asBytes);
-            }
-
-            final long mask = BigInteger.ONE
-                    .shiftLeft(len)
-                    .subtract(BigInteger.ONE)
-                    .longValue();
-            final long sized = asLong & mask;
-            final byte[] asBytes = flip(toBytes(sized));
-
-            final BigInteger bigInteger = new BigInteger(1, asBytes);
-            return bigInteger.shiftRight((asBytes.length * 8) - len);
+            return (ordering == ByteOrdering.BIG) ? new BBI(asLong) : new LBI(asLong);
         }
 
         throw new IllegalStateException("Can't extract a value from type. Field=" + field);
@@ -307,19 +304,6 @@ public interface BitStruct {
     }
 
 
-
-    private static byte[] toBytes(long toConvert) {
-        return new byte[] {
-                (byte) (toConvert >> 56 & 0xff),
-                (byte) (toConvert >> 48 & 0xff),
-                (byte) (toConvert >> 40 & 0xff),
-                (byte) (toConvert >> 32 & 0xff),
-                (byte) (toConvert >> 24 & 0xff),
-                (byte) (toConvert >> 16 & 0xff),
-                (byte) (toConvert >> 8 & 0xff),
-                (byte) (toConvert & 0xff)
-        };
-    }
 
     private static byte[] flip(byte[] in) {
         final byte[] result = new byte[in.length];

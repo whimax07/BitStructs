@@ -6,6 +6,8 @@ import java.util.Arrays;
 public class Endian {
 
     public interface Ray {
+        Ray not();
+
         Ray leftShift(int by);
 
         Ray rightShift(int by);
@@ -37,6 +39,10 @@ public class Endian {
             this(new BigInteger(flip(bytes)));
         }
 
+        public LBI(long val) {
+            this(BigInteger.valueOf(Long.reverseBytes(val)));
+        }
+
 
 
         public LBI and(LBI other) {
@@ -47,17 +53,30 @@ public class Endian {
             return new LBI(value.or(other.value));
         }
 
+        public LBI add(LBI other) {
+            return new LBI(value.add(other.value));
+        }
+
+        public LBI subtract(LBI other) {
+            return new LBI(value.subtract(other.value));
+        }
+
         public BBI swapView() {
             return new BBI(asByteArray());
         }
 
         @Override
-        public Ray leftShift(int by) {
+        public LBI not() {
+            return new LBI(value.not());
+        }
+
+        @Override
+        public LBI leftShift(int by) {
             return new LBI(value.shiftLeft(by));
         }
 
         @Override
-        public Ray rightShift(int by) {
+        public LBI rightShift(int by) {
             return new LBI(value.shiftRight(by));
         }
 
@@ -121,6 +140,10 @@ public class Endian {
             this(new BigInteger(bytes));
         }
 
+        public BBI(long val) {
+            this(BigInteger.valueOf(val));
+        }
+
 
 
         public BBI and(BBI other) {
@@ -131,17 +154,30 @@ public class Endian {
             return new BBI(value.or(other.value));
         }
 
+        public BBI add(BBI other) {
+            return new BBI(value.add(other.value));
+        }
+
+        public BBI subtract(BBI other) {
+            return new BBI(value.subtract(other.value));
+        }
+
         public LBI swapView() {
             return new LBI(asByteArray());
         }
 
         @Override
-        public Ray leftShift(int by) {
+        public BBI not() {
+            return new BBI(value.not());
+        }
+
+        @Override
+        public BBI leftShift(int by) {
             return new BBI(value.shiftLeft(by));
         }
 
         @Override
-        public Ray rightShift(int by) {
+        public BBI rightShift(int by) {
             return new BBI(value.shiftRight(by));
         }
 
@@ -193,6 +229,19 @@ public class Endian {
             result[i] = in[in.length - 1 - i];
         }
         return result;
+    }
+
+    private static byte[] toBytes(long toConvert) {
+        return new byte[] {
+                (byte) (toConvert >> 56 & 0xff),
+                (byte) (toConvert >> 48 & 0xff),
+                (byte) (toConvert >> 40 & 0xff),
+                (byte) (toConvert >> 32 & 0xff),
+                (byte) (toConvert >> 24 & 0xff),
+                (byte) (toConvert >> 16 & 0xff),
+                (byte) (toConvert >> 8 & 0xff),
+                (byte) (toConvert & 0xff)
+        };
     }
 
 }
