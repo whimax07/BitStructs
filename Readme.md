@@ -29,7 +29,7 @@ assertArrayEquals(bytes, encoded);
 
 ### Backing Classes
 ```java
-@BitDetails(byteOrdering = BitDetails.ByteOrdering.LITTLE)
+@BitDetails(byteOrdering = LITTLE)
 @AllArgsConstructor
 public class BankLittle implements BitStruct {
     @BitVal(first = 0, len = 32)
@@ -44,7 +44,7 @@ public class BankLittle implements BitStruct {
 
 
 
-@BitDetails(len = 4, byteOrdering = BitDetails.ByteOrdering.LITTLE)
+@BitDetails(len = 4, byteOrdering = LITTLE)
 @AllArgsConstructor
 public class PwrUp0 implements BitStruct {
     @BitVal(first = 0, len = 6)
@@ -57,7 +57,7 @@ public class PwrUp0 implements BitStruct {
     private final byte direction;
 }
 
-@BitDetails(len = 4, byteOrdering = BitDetails.ByteOrdering.LITTLE)
+@BitDetails(len = 4, byteOrdering = LITTLE)
 @AllArgsConstructor
 public class CurrentPowerUpReg implements BitStruct {
     @BitVal(first = 0, len = 7)
@@ -67,7 +67,7 @@ public class CurrentPowerUpReg implements BitStruct {
     private final int empty;
 }
 
-@BitDetails(len = 4, byteOrdering = BitDetails.ByteOrdering.BIG)
+@BitDetails(len = 4, byteOrdering = BIG)
 @AllArgsConstructor
 public class StatusReg implements BitStruct {
     @BitVal(first = 0, len = 3)
