@@ -1,5 +1,6 @@
 package org.example.lombok;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.example.BitEnum;
 import org.example.BitStruct;
@@ -35,15 +36,13 @@ public class EnumParamsTest {
         private final TestEnum delta2;
     }
 
+    @AllArgsConstructor
     public enum TestEnum implements BitEnum {
         A(0b1),
         B(0b10),
         C(0b100);
 
         private final int value;
-        TestEnum(int value) {
-            this.value = value;
-        }
 
         @Override
         public long val() {
