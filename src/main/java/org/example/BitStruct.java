@@ -207,6 +207,12 @@ public interface BitStruct {
             return (ordering == ByteOrdering.BIG) ? new BBI(orderedInner) : new LBI(orderedInner);
         }
 
+        if (BitEnum.class.isAssignableFrom(type)) {
+            assert type.isEnum();
+            final BitEnum bitEnum = (BitEnum) object;
+            return (ordering == ByteOrdering.BIG) ? new BBI(bitEnum.val()) : new LBI(bitEnum.val());
+        }
+
         if (isIntType(object.getClass())) {
             final Number asNumber = (Number) object;
             final long asLong = asNumber.longValue();
@@ -270,8 +276,9 @@ public interface BitStruct {
             };
         }
 
-        // TODO(Max): Allow enums.
-        final boolean isGood = BitStruct.class.isAssignableFrom(type) || isIntType(type);
+        final boolean isGood = BitStruct.class.isAssignableFrom(type)
+                || BitEnum.class.isAssignableFrom(type)
+                || isIntType(type);
         if (isGood) return type;
 
         throw new IllegalStateException("Unsupported type: " + type.getSimpleName());
@@ -298,7 +305,19 @@ public interface BitStruct {
             return BitStruct.decode(bound, bigSubRange);
         }
 
-        // TODO(Max): Allow enums.
+        if (BitEnum.class.isAssignableFrom(baseType)) {
+            assert baseType.isEnum();
+            final BitEnum[] enumConstants = (BitEnum[]) baseType.getEnumConstants();
+            final long extractedVal = getBigInteger(bitVal, bytes).longValue();
+
+            return Arrays.stream(enumConstants)
+                    .filter(bitEnum -> bitEnum.val() == extractedVal)
+                    .findAny()
+                    .orElseThrow(() -> new IllegalStateException(String.format(
+                            "No enum constant found. [Type=%s, Value=%s] ", baseType, extractedVal
+                    )));
+        }
+
         final BigInteger bigInteger = getBigInteger(bitVal, bytes);
         return switch (baseType.getSimpleName()) {
             case "Boolean" -> bigInteger.intValue() != 0;
